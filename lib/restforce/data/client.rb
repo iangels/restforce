@@ -4,6 +4,7 @@ module Restforce
       include Restforce::Concerns::Streaming
       include Restforce::Concerns::Picklists
       include Restforce::Concerns::Canvas
+      include Restforce::Concerns::Reports
 
       # Public: Returns a url to the resource.
       #
