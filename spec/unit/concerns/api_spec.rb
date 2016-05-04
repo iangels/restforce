@@ -1,7 +1,7 @@
 require 'spec_helper'
 
 describe Restforce::Concerns::API do
-  let(:response) { double('Faraday::Response', :body => double('Body')) }
+  let(:response) { double('Faraday::Response', body: double('Body')) }
 
   describe '.user_info' do
     subject(:user_info) { client.user_info }
@@ -9,7 +9,7 @@ describe Restforce::Concerns::API do
     it 'returns the user info from identity url' do
       identity_url = double('identity_url')
       response.body.stub(:identity).and_return(identity_url)
-      client.should_receive(:api_get).with().and_return(response)
+      client.should_receive(:api_get).with.and_return(response)
 
       identity = double('identity')
       identity.stub(:body).and_return(identity)
@@ -19,14 +19,66 @@ describe Restforce::Concerns::API do
     end
   end
 
+  describe '.get_updated' do
+    let(:start_date_time) { Time.new(2002, 10, 31, 2, 2, 2, "+02:00") }
+    let(:end_date_time) { Time.new(2003, 10, 31, 2, 2, 2, "+02:00") }
+    let(:sobject) { 'Whizbang' }
+    subject(:results) { client.get_updated(sobject, start_date_time, end_date_time) }
+    it 'returns the body' do
+      start_string = '2002-10-31T00:02:02Z'
+      end_string = '2003-10-31T00:02:02Z'
+      url = "/sobjects/Whizbang/updated/?start=#{start_string}&end=#{end_string}"
+      client.should_receive(:api_get).
+        with(url).
+        and_return(response)
+      expect(results).to eq response.body
+    end
+  end
+
   describe '.list_sobjects' do
     subject { client.list_sobjects }
 
     before do
-      client.stub :describe => [ { 'name' => 'foo' } ]
+      client.stub describe: [{ 'name' => 'foo' }]
     end
 
     it { should eq ['foo'] }
+  end
+
+  describe '.limits' do
+    subject { client.limits }
+
+    it 'returns the limits for an organization' do
+      limits = double('limits')
+      limits.stub(:body).and_return({})
+      client.should_receive(:api_get).with("limits").and_return(limits)
+      client.should_receive(:options).and_return(api_version: 29.0)
+      expect(client.limits).to eq({})
+    end
+
+    it "raises an exception if we aren't at version 29.0 or above" do
+      client.should_receive(:options).at_least(:once).and_return(api_version: 24.0)
+      expect { client.limits }.to raise_error(Restforce::APIVersionError)
+    end
+  end
+
+  describe '.explain' do
+    let(:soql)        { 'Select Id from Account' }
+    subject(:results) { client.explain(soql) }
+
+    it "returns an execute plan for this SOQL" do
+      plans = double("plans")
+      plans.stub(:body).and_return("plans" => [])
+      client.should_receive(:api_get).with("query", explain: soql).
+        and_return(plans)
+      client.should_receive(:options).and_return(api_version: 30.0)
+      expect(results).to eq("plans" => [])
+    end
+
+    it "raises an exception if we aren't at version 30.0 or above" do
+      client.should_receive(:options).at_least(:once).and_return(api_version: 24.0)
+      expect { results }.to raise_error(Restforce::APIVersionError)
+    end
   end
 
   describe '.describe' do
@@ -56,21 +108,35 @@ describe Restforce::Concerns::API do
   describe '.describe_layouts' do
     subject(:describe_layouts) { client.describe_layouts('Whizbang') }
 
-    it 'returns the layouts for the sobject' do
-      client.should_receive(:api_get).
-        with('sobjects/Whizbang/describe/layouts').
-        and_return(response)
-      expect(describe_layouts).to eq response.body
-    end
+    context "API version where describe_layouts is supported" do
+      before { client.should_receive(:options).and_return(api_version: 28.0) }
 
-    context 'when given the id of a layout' do
-      subject(:describe_layouts) { client.describe_layouts('Whizbang', '012E0000000RHEp') }
-
-      it 'returns the describe for the specified layout' do
+      it 'returns the layouts for the sobject' do
         client.should_receive(:api_get).
-          with('sobjects/Whizbang/describe/layouts/012E0000000RHEp').
+          with('sobjects/Whizbang/describe/layouts').
           and_return(response)
         expect(describe_layouts).to eq response.body
+      end
+
+      context 'when given the id of a layout' do
+        subject(:describe_layouts) do
+          client.describe_layouts('Whizbang', '012E0000000RHEp')
+        end
+
+        it 'returns the describe for the specified layout' do
+          client.should_receive(:api_get).
+            with('sobjects/Whizbang/describe/layouts/012E0000000RHEp').
+            and_return(response)
+          expect(describe_layouts).to eq response.body
+        end
+      end
+    end
+
+    context "an API version where describe_layouts is not supported" do
+      before { client.should_receive(:options).and_return(api_version: 24.0) }
+
+      it "raises a error" do
+        expect { describe_layouts }.to raise_error(Restforce::APIVersionError)
       end
     end
   end
@@ -79,7 +145,7 @@ describe Restforce::Concerns::API do
     subject(:org_id) { client.org_id }
 
     it 'returns the organization id' do
-      organizations = [ { 'Id' => 'foo' } ]
+      organizations = [{ 'Id' => 'foo' }]
       client.should_receive(:query).
         with('select id from Organization').
         and_return(organizations)
@@ -93,12 +159,12 @@ describe Restforce::Concerns::API do
 
     context 'with mashify middleware' do
       before do
-        client.stub :mashify? => true
+        client.stub mashify?: true
       end
 
       it 'returns the body' do
         client.should_receive(:api_get).
-          with('query', :q => soql).
+          with('query', q: soql).
           and_return(response)
         expect(results).to eq response.body
       end
@@ -106,7 +172,7 @@ describe Restforce::Concerns::API do
 
     context 'without mashify middleware' do
       before do
-        client.stub :mashify? => false
+        client.stub mashify?: false
       end
 
       it 'returns the records attribute of the body' do
@@ -115,9 +181,52 @@ describe Restforce::Concerns::API do
           with('records').
           and_return(records)
         client.should_receive(:api_get).
-          with('query', :q => soql).
+          with('query', q: soql).
           and_return(response)
         expect(results).to eq records
+      end
+    end
+  end
+
+  describe '.query_all' do
+    let(:soql)        { 'Select Id from Account' }
+    subject(:results) { client.query_all(soql) }
+
+    context "with supported api_version" do
+      before { client.should_receive(:options).and_return(api_version: 31.0) }
+
+      context 'with mashify middleware' do
+        before { client.stub(mashify?: true) }
+
+        it 'returns the body' do
+          client.should_receive(:api_get).with('queryAll', q: soql).
+            and_return(response)
+          expect(results).to eq(response.body)
+        end
+      end
+
+      context 'without mashify middleware' do
+        before do
+          client.stub(mashify?: false)
+        end
+
+        it 'returns the records attribute of the body' do
+          records = double('records')
+          response.body.stub(:[]).with('records').and_return(records)
+          client.should_receive(:api_get).with('queryAll', q: soql).
+            and_return(response)
+          expect(results).to eq(records)
+        end
+      end
+    end
+
+    context "with unsupported api_version" do
+      before { client.should_receive(:options).and_return(api_version: 26.0) }
+
+      subject(:query_all) { client.query_all(soql) }
+
+      it "raises an error" do
+        expect { query_all }.to raise_error(Restforce::APIVersionError)
       end
     end
   end
@@ -128,7 +237,7 @@ describe Restforce::Concerns::API do
 
     it 'performs a sosl search' do
       client.should_receive(:api_get).
-        with('search', :q => sosl).
+        with('search', q: sosl).
         and_return(response)
       expect(results).to eq response.body
     end
@@ -177,17 +286,17 @@ describe Restforce::Concerns::API do
     subject(:result) { client.update!(sobject, attrs) }
 
     context 'when the id field is present' do
-      let(:attrs) { { :id => '1234' } }
+      let(:attrs) { { id: '1234', StageName: "Call Scheduled" } }
 
       it 'sends an HTTP PATCH, and returns true' do
         client.should_receive(:api_patch).
-          with('sobjects/Whizbang/1234', attrs)
+          with('sobjects/Whizbang/1234', StageName: "Call Scheduled")
         expect(result).to be_true
       end
     end
 
     context 'when the id field is missing from the attrs' do
-      subject { lambda { result }}
+      subject { lambda { result } }
       it { should raise_error ArgumentError, 'Id field missing from attrs.' }
     end
   end
@@ -303,6 +412,27 @@ describe Restforce::Concerns::API do
             and_return(response)
           expect(result).to eq response.body
         end
+      end
+    end
+  end
+
+  describe "#recent" do
+    let(:limit) { nil }
+    subject(:result) { client.recent(limit) }
+
+    context "given no limit is specified" do
+      it "returns the most recently viewed items for the logged-in user" do
+        client.should_receive(:api_get).with('recent').and_return(response)
+        expect(result).to eq response.body
+      end
+    end
+
+    context "given a limit is specified" do
+      let(:limit) { 10 }
+
+      it "returns up to the limit specified results" do
+        client.should_receive(:api_get).with('recent?limit=10').and_return(response)
+        expect(result).to eq response.body
       end
     end
   end
