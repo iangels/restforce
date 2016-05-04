@@ -8,20 +8,13 @@ module Restforce
       define_verbs :get, :post, :put, :delete, :patch, :head
 
       def report(report_id, attrs)
-        api_post("reports/#{report_id}", attrs).body
+        api_post("analytics/reports/#{report_id}", attrs).body
       end
 
       def describe_report(report_id)
-        api_get("reports/#{report_id}/describe").body
-      end
-
-      private
-
-      def api_path(path)
-        "/services/data/v#{options[:api_version]}/analytics/#{path}"
+        api_get("analytics/reports/#{report_id}/describe").body
       end
 
     end
   end
 end
-
