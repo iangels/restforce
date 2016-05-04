@@ -11,6 +11,10 @@ module Restforce
         api_post("reports/#{report_id}", attrs).body
       end
 
+      def describe_report(report_id)
+        api_get("reports/#{report_id}/describe").body
+      end
+
       private
 
       def api_path(path)
@@ -20,3 +24,4 @@ module Restforce
     end
   end
 end
+
